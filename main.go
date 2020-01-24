@@ -5,11 +5,13 @@ import (
 	"log"
 	"net"
 	"os"
+	"sort"
 	"time"
 
 	"github.com/google/gopacket"
 	"github.com/google/gopacket/layers"
 	"github.com/google/gopacket/pcap"
+	"github.com/mostlygeek/arp"
 	"gopkg.in/alecthomas/kingpin.v2"
 )
 
@@ -22,16 +24,33 @@ var (
 	buffer      gopacket.SerializeBuffer
 	options     gopacket.SerializeOptions
 
-	device  = *kingpin.Flag("Interface", "the interface to use for sending the packet").Short('i').Default("wlp2s0").String()
-	sIP     = *kingpin.Flag("sourceIP", "source IP address").Short('s').String()
-	dIP     = *kingpin.Flag("destIP", "dest IP address").Short('d').Required().String()
-	sMac    = *kingpin.Flag("sMAC", "source MAC address").Short('S').String()
-	dMac    = *kingpin.Flag("dMAC", "destination MAC address").Required().Short('D').String()
-	payload = *kingpin.Flag("payload", "payload for the ICMP packet").Short('p').String()
-	count   = *kingpin.Flag("count", "count of ping pakets").Short('c').Int()
+	device  = kingpin.Flag("Interface", "the interface to use for sending the packet").Short('i').HintAction(listNICS).String()
+	sIP     = kingpin.Flag("sourceIP", "source IP address").Short('s').String()
+	dIP     = kingpin.Flag("destIP", "dest IP address").Short('d').Required().String()
+	sMac    = kingpin.Flag("sourceMAC", "source MAC address").HintOptions("ff:ff:ff:ff:ff:ff", "00:00:00:00:00:00", "11:22:33:44:55:66", "01:02:01:03:04:01", "a3:01:d9:cc:c1:32", "random").Short('S').String()
+	dMac    = kingpin.Flag("dMAC", "destination MAC address").Short('D').String()
+	payload = kingpin.Flag("payload", "payload for the ICMP packet").Short('p').String()
+	count   = kingpin.Flag("count", "count of ping pakets").Short('c').Default("1").Int()
 )
 
-func init() {
+func listNICS() []string {
+	devices, err := pcap.FindAllDevs()
+	if err != nil {
+		return []string{}
+	}
+	s := make([]string, len(devices))
+
+	for _, dev := range devices {
+		s = append(s, dev.Name)
+	}
+	sort.Slice(s, func(p, q int) bool {
+		return s[p] < s[q]
+	})
+	return s
+}
+
+func initParams() {
+	kingpin.Parse()
 	var showNICs bool
 	for _, arg := range os.Args {
 		if arg == "--listNICs" {
@@ -59,11 +78,9 @@ func init() {
 		return
 	}
 
-	kingpin.Parse()
-
-	addr, err := net.InterfaceByName(device)
+	addr, err := net.InterfaceByName(*device)
 	if err != nil {
-		fmt.Println("Error setting up the interface: ", device)
+		fmt.Println("Error setting up the interface: ", device, err.Error())
 		os.Exit(1)
 		return
 	}
@@ -74,27 +91,51 @@ func init() {
 		return
 	}
 
-	if len(sIP) == 0 {
-		sIP = ipRemoveSubnet(addrs[0].String())
+	if len(*sIP) == 0 {
+		*sIP = ipRemoveSubnet(addrs[0].String())
 	}
-	if len(sMac) == 0 {
-		sMac = addr.HardwareAddr.String()
+	if len(*sMac) == 0 {
+		*sMac = addr.HardwareAddr.String()
+		if len(*sMac) == 0 {
+			fmt.Println("Error getting local mac on interface", *device)
+			os.Exit(1)
+			return
+		}
+	}
+	if *sMac == "random" {
+		*sMac = getRandomMac()
+		fmt.Printf("Random mac is %s\n", *sMac)
 	}
 
-	if len(dIP) == 0 {
+	if len(*dIP) == 0 {
 		fmt.Println("You need to specify the destination IP address!")
 		os.Exit(1)
 		return
 	}
-	if len(dMac) == 0 {
-		fmt.Println("You need to specify the destination MAC address!")
-		os.Exit(1)
-		return
+
+	if *dIP == "localhost" {
+		*dIP = "127.0.0.1"
+		*dMac = *sMac
+	}
+
+	if len(*dMac) == 0 {
+		if isIPBogon(*dIP) {
+			fmt.Println("isbogon")
+			*dMac = arp.Search(*dIP)
+		} else {
+			*dMac = getMacFromIP(getGateway())
+		}
+		if len(*dMac) == 0 {
+			fmt.Println("Error getting dest MAC!")
+			os.Exit(1)
+			return
+		}
 	}
 }
 
 func main() {
-	handle, err = pcap.OpenLive(device, snapshotLen, promiscouos, timeout)
+	initParams()
+	handle, err = pcap.OpenLive(*device, snapshotLen, promiscouos, timeout)
 	if err != nil {
 		panic(err)
 	}
@@ -115,16 +156,16 @@ func main() {
 		TTL:      128,
 		Protocol: layers.IPProtocolICMPv4,
 		Flags:    layers.IPv4DontFragment,
-		SrcIP:    net.ParseIP(sIP),
-		DstIP:    net.ParseIP(dIP),
+		SrcIP:    net.ParseIP(*sIP),
+		DstIP:    net.ParseIP(*dIP),
 	}
 
-	shw, err := net.ParseMAC(sMac)
+	shw, err := net.ParseMAC(*sMac)
 	if err != nil {
 		fmt.Println("Error parsing src-mac")
 		return
 	}
-	dhw, err := net.ParseMAC(dMac)
+	dhw, err := net.ParseMAC(*dMac)
 	if err != nil {
 		fmt.Println("Error parsing dest-mac")
 		return
@@ -140,9 +181,9 @@ func main() {
 		ethLayer,
 		ipLayer,
 		icmpLayer,
-		gopacket.Payload([]byte(payload)),
+		gopacket.Payload([]byte(*payload)),
 	)
-	for i := 0; i < count; i++ {
+	for i := 0; i < *count; i++ {
 		err = handle.WritePacketData(buffer.Bytes())
 		if err != nil {
 			fmt.Println("Error sending ping")
