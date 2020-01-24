@@ -15,8 +15,8 @@ import (
 
 var (
 	device      string
-	snapshotLen int32 = 1024
-	promiscouos bool  = true
+	snapshotLen int32 = 2048
+	promiscouos bool  = false
 	err         error
 	timeout     time.Duration = 30 * time.Second
 	handle      *pcap.Handle
@@ -110,11 +110,8 @@ func main() {
 
 	icmpLayer := &layers.ICMPv4{
 		TypeCode: layers.ICMPv4TypeEchoRequest << 8,
-		BaseLayer: layers.BaseLayer{
-			Payload: []byte(payload),
-		},
-		Id:  (uint16)(os.Getpid() & 0xffff),
-		Seq: 1,
+		Id:       (uint16)(os.Getpid() & 0xffff),
+		Seq:      1,
 	}
 
 	ipLayer := &layers.IPv4{
@@ -147,6 +144,7 @@ func main() {
 		ethLayer,
 		ipLayer,
 		icmpLayer,
+		gopacket.Payload([]byte(payload)),
 	)
 	for i := 0; i < count; i++ {
 		err = handle.WritePacketData(buffer.Bytes())
