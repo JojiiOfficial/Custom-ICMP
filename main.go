@@ -162,11 +162,14 @@ func main() {
 	shw, err := net.ParseMAC(*sMac)
 	if err != nil {
 		fmt.Println("Error parsing src-mac")
+		os.Exit(1)
 		return
 	}
+
 	dhw, err := net.ParseMAC(*dMac)
 	if err != nil {
 		fmt.Println("Error parsing dest-mac")
+		os.Exit(1)
 		return
 	}
 
