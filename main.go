@@ -50,7 +50,6 @@ func listNICS() []string {
 }
 
 func initParams() {
-	kingpin.Parse()
 	var showNICs bool
 	for _, arg := range os.Args {
 		if arg == "--listNICs" {
@@ -77,6 +76,7 @@ func initParams() {
 		os.Exit(0)
 		return
 	}
+	kingpin.Parse()
 
 	addr, err := net.InterfaceByName(*device)
 	if err != nil {
