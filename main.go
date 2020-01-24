@@ -120,7 +120,6 @@ func initParams() {
 
 	if len(*dMac) == 0 {
 		if isIPBogon(*dIP) {
-			fmt.Println("isbogon")
 			*dMac = arp.Search(*dIP)
 		} else {
 			*dMac = getMacFromIP(getGateway())
