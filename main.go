@@ -1,7 +1,6 @@
 package main
 
 import (
-	"flag"
 	"fmt"
 	"log"
 	"net"
@@ -11,10 +10,10 @@ import (
 	"github.com/google/gopacket"
 	"github.com/google/gopacket/layers"
 	"github.com/google/gopacket/pcap"
+	"gopkg.in/alecthomas/kingpin.v2"
 )
 
 var (
-	device      string
 	snapshotLen int32 = 2048
 	promiscouos bool  = false
 	err         error
@@ -23,27 +22,22 @@ var (
 	buffer      gopacket.SerializeBuffer
 	options     gopacket.SerializeOptions
 
-	sIP     string
-	dIP     string
-	sMac    string
-	dMac    string
-	payload string
-	count   int
+	device  = *kingpin.Flag("Interface", "the interface to use for sending the packet").Short('i').Default("wlp2s0").String()
+	sIP     = *kingpin.Flag("sourceIP", "source IP address").Short('s').String()
+	dIP     = *kingpin.Flag("destIP", "dest IP address").Short('d').Required().String()
+	sMac    = *kingpin.Flag("sMAC", "source MAC address").Short('S').String()
+	dMac    = *kingpin.Flag("dMAC", "destination MAC address").Required().Short('D').String()
+	payload = *kingpin.Flag("payload", "payload for the ICMP packet").Short('p').String()
+	count   = *kingpin.Flag("count", "count of ping pakets").Short('c').Int()
 )
 
 func init() {
 	var showNICs bool
-	flag.BoolVar(&showNICs, "listInterfaces", false, "lists your networkinterfaces")
-	flag.IntVar(&count, "count", 1, "count of packets to send")
-	flag.StringVar(&device, "interface", "wlp2s0", "interface to use")
-	flag.StringVar(&sIP, "sIP", "", "source IP in IP header")
-	flag.StringVar(&dIP, "dIP", "", "dest IP in IP header")
-	flag.StringVar(&sMac, "sMAC", "", "source MAC address")
-	flag.StringVar(&dMac, "dMAC", "", "dest MAC address")
-	flag.StringVar(&payload, "payload", "abc", "The payload to send in the ping packet")
-
-	flag.Parse()
-
+	for _, arg := range os.Args {
+		if arg == "--listNICs" {
+			showNICs = true
+		}
+	}
 	if showNICs {
 		devices, err := pcap.FindAllDevs()
 		if err != nil {
@@ -64,6 +58,8 @@ func init() {
 		os.Exit(0)
 		return
 	}
+
+	kingpin.Parse()
 
 	addr, err := net.InterfaceByName(device)
 	if err != nil {
