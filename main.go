@@ -3,6 +3,7 @@ package main
 import (
 	"flag"
 	"fmt"
+	"log"
 	"net"
 	"os"
 	"time"
@@ -31,6 +32,8 @@ var (
 )
 
 func init() {
+	var showNICs bool
+	flag.BoolVar(&showNICs, "listInterfaces", false, "lists your networkinterfaces")
 	flag.IntVar(&count, "count", 1, "count of packets to send")
 	flag.StringVar(&device, "interface", "wlp2s0", "interface to use")
 	flag.StringVar(&sIP, "sIP", "", "source IP in IP header")
@@ -40,6 +43,27 @@ func init() {
 	flag.StringVar(&payload, "payload", "abc", "The payload to send in the ping packet")
 
 	flag.Parse()
+
+	if showNICs {
+		devices, err := pcap.FindAllDevs()
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		// Print device information
+		fmt.Println("Devices found:")
+		for _, device := range devices {
+			fmt.Println("\nName: ", device.Name)
+			fmt.Println("Description: ", device.Description)
+			fmt.Println("Devices addresses: ", device.Description)
+			for _, address := range device.Addresses {
+				fmt.Println("- IP address: ", address.IP)
+				fmt.Println("- Subnet mask: ", address.Netmask)
+			}
+		}
+		os.Exit(0)
+		return
+	}
 
 	addr, err := net.InterfaceByName(device)
 	if err != nil {
