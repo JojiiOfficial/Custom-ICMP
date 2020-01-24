@@ -97,7 +97,7 @@ func initParams() {
 	if len(*sMac) == 0 {
 		*sMac = addr.HardwareAddr.String()
 		if len(*sMac) == 0 {
-			fmt.Println("Error getting local mac on interface", *device)
+			fmt.Println("Error getting local mac on interface ", *device)
 			os.Exit(1)
 			return
 		}
@@ -136,7 +136,9 @@ func main() {
 	initParams()
 	handle, err = pcap.OpenLive(*device, snapshotLen, promiscouos, timeout)
 	if err != nil {
-		panic(err)
+		fmt.Println(err.Error())
+		os.Exit(1)
+		return
 	}
 	defer handle.Close()
 	options := gopacket.SerializeOptions{
